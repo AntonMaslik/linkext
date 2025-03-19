@@ -1,38 +1,33 @@
-# Use the lightweight official Node.js image as a base
-FROM node:23-alpine as builder
+# Use an official Node.js LTS version for better stability
+FROM node:23-alpine AS builder
 
-# Set environment variables
-ENV NODE_ENV=production
-
-# Set working directory
+# Set the working directory for the builder stage
 WORKDIR /app
 
-# Copy package files and install dependencies (only production dependencies)
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production=false
+# Copy package.json and yarn.lock to leverage Docker cache during build
+COPY package*.json yarn.lock ./
 
-# Copy the entire application source code
+# Install dependencies from yarn.lock to ensure consistent installs
+RUN yarn install --frozen-lockfile
+
+# Copy the rest of the application code to the container
 COPY . .
 
-# Build the application
+# Build the production version of the app (this will create the dist folder)
 RUN yarn build
 
-# Create the final production image
-FROM node:23-alpine
+# Use a lightweight base image for the final stage
+FROM node:23-alpine 
 
-# Set working directory
 WORKDIR /app
 
-# Copy only necessary files from the builder stage
-COPY --from=builder /app/package.json /app/yarn.lock ./
-COPY --from=builder /app/dist /app/dist
+# Copy the package.json and node_modules from the builder stage
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
 
-# Install only production dependencies and remove cache
-RUN yarn install --frozen-lockfile --production && \
-    yarn cache clean
-
-# Expose the port
+# Expose the application's port (default for NestJS is 3000)
 EXPOSE 3000
 
-# Run the application
-CMD ["node", "dist/main.js"]
+# Start the server using the production build
+CMD ["yarn", "start:prod"]

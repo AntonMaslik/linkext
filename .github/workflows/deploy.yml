@@ -1,0 +1,86 @@
+name: Deploy Docker Compose
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Update code in repository
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /root/linkext
+            git fetch --all
+            git reset --hard origin/master
+            git clean -fd
+
+      - name: Create .env file with environment variables
+        uses: appleboy/ssh-action@v0.1.10
+        env:
+          MONGODB_URI: ${{ vars.MONGODB_URI }}
+          NODE_ENV: production
+          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+          VITE_APP_API_URL: ${{ vars.VITE_APP_API_URL }}
+          LINK_HOST: ${{ vars.LINK_HOST }}
+          LINK_PORT: ${{ vars.LINK_PORT }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: HOST,SERVER_USER,PORT,MONGODB_URI,NODE_ENV,ALLOWED_ORIGINS,VITE_APP_API_URL,LINK_HOST,LINK_PORT
+          script: |
+            cd /root/linkext
+            echo "MONGODB_URI=${{ vars.MONGODB_URI }}" > .env
+            echo "NODE_ENV=production" >> .env
+            echo "ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }}" >> .env
+            echo "VITE_APP_API_URL=${{ vars.VITE_APP_API_URL }}" >> .env
+            echo "LINK_HOST=${{ vars.LINK_HOST }}" >> .env
+            echo "LINK_PORT=${{ vars.LINK_PORT }}" >> .env
+
+      - name: Add ssl sert and ssl key
+        uses: appleboy/ssh-action@v0.1.10
+        env:
+          SSL_SERT: ${{ vars.SSL_SERT }}
+          SSL_KEY: ${{ vars.SSL_KEY }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: SSL_SERT,SSL_KEY
+          script: |
+            cd /root/linkext
+
+            echo "${{ vars.SSL_SERT }}" > nginx/cert.pem
+            echo "${{ vars.SSL_KEY }}" > nginx/key.pem
+        
+      - name: Deploy on server with SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /root/linkext
+
+            cp .env backend/.env
+            cp .env frontend/.env
+
+            docker compose down
+            docker compose pull
+            docker compose up -d --build
+            docker system prune -af

@@ -68,7 +68,7 @@ export class AppService {
   }
 
   getFullLink(shortCode: string) {
-    const resultUrl = `http://${this.configService.getOrThrow<string>('HOST')}:${this.configService.getOrThrow<string>('PORT')}/${shortCode}`;
+    const resultUrl = `http://${this.configService.getOrThrow<string>('LINK_HOST')}:${this.configService.getOrThrow<string>('LINK_PORT')}/${shortCode}`;
 
     return resultUrl;
   }
